@@ -1,0 +1,11 @@
+{
+  "name": "Remix Aplikasi Pelaporan Budidaya Bawang Putih",
+  "description": "Sistem pendataan terintegrasi potensi pertanian bawang putih Bhabinkamtibmas \u0026 Dashboard Admin Pusat dengan analisis prediktif panen dan notifikasi real-time.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
