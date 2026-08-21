@@ -18,7 +18,13 @@ import {
   Building2,
 } from 'lucide-react';
 import { UserAccount, UserStatus } from '../../types';
-import { getUsers, saveUsers, addAuditLog, getCurrentUser } from '../../services/appState';
+import {
+  getUsers,
+  saveUsers,
+  addAuditLog,
+  getCurrentUser,
+  updateAdminPassword,
+} from '../../services/appState';
 
 interface UserManagementProps {
   onRefresh: () => void;
@@ -28,6 +34,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onRefresh }) => 
   const [users, setUsersList] = useState<UserAccount[]>(getUsers());
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // Admin Change Password Modal State
+  const [showAdminPassModal, setShowAdminPassModal] = useState(false);
+  const [adminNewPassInput, setAdminNewPassInput] = useState('');
+  const [adminConfirmPassInput, setAdminConfirmPassInput] = useState('');
+  const [adminPassError, setAdminPassError] = useState<string | null>(null);
+  const [adminPassSuccess, setAdminPassSuccess] = useState<string | null>(null);
 
   // Edit User State
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -174,6 +187,35 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onRefresh }) => 
     onRefresh();
   };
 
+  const handleAdminPasswordChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminPassError(null);
+    setAdminPassSuccess(null);
+
+    if (!adminNewPassInput.trim() || adminNewPassInput.trim().length < 6) {
+      setAdminPassError('Kata sandi baru minimal 6 karakter.');
+      return;
+    }
+
+    if (adminNewPassInput.trim() !== adminConfirmPassInput.trim()) {
+      setAdminPassError('Konfirmasi kata sandi baru tidak sesuai.');
+      return;
+    }
+
+    const success = updateAdminPassword(adminNewPassInput.trim());
+    if (success) {
+      setAdminPassSuccess('Kata sandi Admin berhasil diperbarui!');
+      setTimeout(() => {
+        setShowAdminPassModal(false);
+        setAdminPassSuccess(null);
+        setAdminNewPassInput('');
+        setAdminConfirmPassInput('');
+      }, 1500);
+    } else {
+      setAdminPassError('Gagal memperbarui kata sandi admin.');
+    }
+  };
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-xl space-y-4">
       {/* Header */}
@@ -192,6 +234,43 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onRefresh }) => 
           className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
         >
           <UserPlus className="w-4 h-4" /> Registrasi User Baru
+        </button>
+      </div>
+
+      {/* Admin Security Banner */}
+      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                ADMIN SATBINMAS POLRES ENREKANG
+              </span>
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                ● Aktif
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 font-bold mt-0.5">
+              Akun Pengelola Utama Command Center (admin.enrekang)
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowAdminPassModal(true);
+            setAdminPassError(null);
+            setAdminPassSuccess(null);
+            setAdminNewPassInput('');
+            setAdminConfirmPassInput('');
+          }}
+          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+        >
+          <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+          <span>Ubah Kata Sandi Admin</span>
         </button>
       </div>
 
@@ -729,6 +808,92 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onRefresh }) => 
                 <Save className="w-4 h-4" /> Simpan User Baru
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Change Password Modal */}
+      {showAdminPassModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 text-white shadow-2xl space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Ubah Kata Sandi Admin</h3>
+                  <p className="text-[10px] text-slate-400">Akun: admin.enrekang (Satbinmas)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAdminPassModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {adminPassError && (
+              <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{adminPassError}</span>
+              </div>
+            )}
+
+            {adminPassSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs flex items-start gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>{adminPassSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAdminPasswordChange} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">
+                  Kata Sandi Baru (Minimal 6 Karakter) *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={adminNewPassInput}
+                  onChange={(e) => setAdminNewPassInput(e.target.value)}
+                  placeholder="Masukkan kata sandi baru..."
+                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl py-2 px-3 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">
+                  Ulangi / Konfirmasi Kata Sandi Baru *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={adminConfirmPassInput}
+                  onChange={(e) => setAdminConfirmPassInput(e.target.value)}
+                  placeholder="Ketik ulang kata sandi baru..."
+                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl py-2 px-3 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 flex justify-end gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 text-slate-300 rounded-xl font-semibold hover:bg-slate-700 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl flex items-center gap-1.5 shadow transition"
+                >
+                  <Save className="w-4 h-4 text-slate-950" />
+                  <span>Simpan Perubahan Sandi</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

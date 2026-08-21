@@ -24,6 +24,8 @@ export type StatusLaporan =
   | 'DISETUJUI'
   | 'DITOLAK';
 
+export type SyncStatus = 'SYNCED' | 'PENDING_SYNC' | 'SYNC_ERROR';
+
 export type PertumbuhanTanaman = 'Olahan Tanah' | 'Bibit / Tanam Baru' | 'Vegetatif (0-45 HST)' | 'Generatif (46-90 HST)' | 'Siap Panen (90+ HST)';
 export type StatusTanaman = PertumbuhanTanaman;
 
@@ -91,6 +93,9 @@ export interface LaporanBudidaya {
   buktiFoto: PhotoBukti[];
   dataPanen?: DataPanen;
   status: StatusLaporan;
+  syncStatus?: SyncStatus;
+  isOfflineCreated?: boolean;
+  offlineSavedAt?: string;
   tanggalInput: string;
   tanggalUpdate: string;
   revisiPending?: RevisionRequest;
@@ -131,7 +136,18 @@ export interface AuditLog {
   actorId: string;
   actorName: string;
   actorRole: UserRole;
-  actionType: 'CREATE_REPORT' | 'REQUEST_REVISION' | 'APPROVE_REVISION' | 'REJECT_REVISION' | 'UPDATE_REPORT' | 'DELETE_REPORT' | 'USER_MANAGEMENT' | 'USER_LOGIN' | 'USER_LOGOUT';
+  actionType:
+    | 'CREATE_REPORT'
+    | 'REQUEST_REVISION'
+    | 'APPROVE_REVISION'
+    | 'REJECT_REVISION'
+    | 'UPDATE_REPORT'
+    | 'DELETE_REPORT'
+    | 'USER_MANAGEMENT'
+    | 'USER_LOGIN'
+    | 'USER_LOGOUT'
+    | 'EXPORT_REPORT'
+    | 'BACKUP_DATABASE';
   laporanId?: string;
   targetInfo: string;
   details: string;

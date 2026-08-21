@@ -50,7 +50,11 @@ export const AuditLogs: React.FC<AuditLogsProps> = ({ logs }) => {
                 <td className="p-3">
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      log.actionType.includes('APPROVE')
+                      log.actionType === 'BACKUP_DATABASE'
+                        ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/60'
+                        : log.actionType === 'EXPORT_REPORT'
+                        ? 'bg-sky-950 text-sky-300 border border-sky-700/60'
+                        : log.actionType.includes('APPROVE')
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/60'
                         : log.actionType.includes('REJECT')
                         ? 'bg-rose-950 text-rose-300 border border-rose-700/60'

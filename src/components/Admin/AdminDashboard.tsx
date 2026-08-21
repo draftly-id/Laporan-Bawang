@@ -18,6 +18,12 @@ import {
   Layers,
   Sprout,
   CloudRain,
+  Database,
+  FileJson,
+  Check,
+  HardDrive,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -33,7 +39,8 @@ import {
   Cell,
 } from 'recharts';
 import { LaporanBudidaya, UserAccount } from '../../types';
-import { adminDeleteReport } from '../../services/appState';
+import { adminDeleteReport, downloadDatabaseBackup } from '../../services/appState';
+import { firestoreSync } from '../../services/firestoreSync';
 
 interface AdminDashboardProps {
   currentUser: UserAccount;
@@ -64,6 +71,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedDesa, setSelectedDesa] = useState('SEMUA');
   const [deleteModalReport, setDeleteModalReport] = useState<LaporanBudidaya | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+
+  // Backup Modal State
+  const [backupModalData, setBackupModalData] = useState<{
+    isOpen: boolean;
+    filename: string;
+    sizeBytes: number;
+    summary: {
+      totalReports: number;
+      totalUsers: number;
+      totalAuditLogs: number;
+      totalNotifications: number;
+      totalLuasTanamM2: number;
+      totalProduksiPanenKg: number;
+      totalBibitKg: number;
+    };
+  } | null>(null);
+
+  const handleBackupLokal = () => {
+    const res = downloadDatabaseBackup();
+    setBackupModalData({
+      isOpen: true,
+      filename: res.filename,
+      sizeBytes: res.sizeBytes,
+      summary: res.summary,
+    });
+    onRefresh();
+  };
+
+  // Cloud Sync Handler State
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [cloudSyncFeedback, setCloudSyncFeedback] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  const handlePushToCloud = async () => {
+    setIsCloudSyncing(true);
+    setCloudSyncFeedback(null);
+    try {
+      const result = await firestoreSync.forcePushAllToCloud();
+      if (result.success) {
+        setCloudSyncFeedback({
+          success: true,
+          message: `Berhasil sinkronisasi ${result.count} data laporan ke Google Firebase Cloud Firestore.`,
+        });
+      } else {
+        setCloudSyncFeedback({
+          success: false,
+          message: `Sinkronisasi gagal: ${result.error || 'Terjadi kesalahan jaringan'}`,
+        });
+      }
+    } catch (err: any) {
+      setCloudSyncFeedback({
+        success: false,
+        message: `Koneksi bermasalah: ${err.message}`,
+      });
+    } finally {
+      setIsCloudSyncing(false);
+      onRefresh();
+      setTimeout(() => {
+        setCloudSyncFeedback(null);
+      }, 7000);
+    }
+  };
 
   // Extract unique Kecamatan and Desa for filter dropdowns
   const listKecamatan = Array.from(
@@ -249,12 +320,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <button
             onClick={onOpenExport}
-            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center gap-1.5 shadow transition"
+            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <Download className="w-4 h-4" /> Ekspor & PDF
           </button>
+
+          <button
+            onClick={handlePushToCloud}
+            disabled={isCloudSyncing}
+            className="px-3 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-lg shadow-amber-900/30 transition border border-amber-400/30 cursor-pointer"
+            title="Sinkronisasi seluruh data lokal ke Google Firebase Cloud Firestore secara real-time"
+          >
+            {isCloudSyncing ? (
+              <>
+                <RefreshCw className="w-4 h-4 text-amber-200 animate-spin" /> Sinkronisasi...
+              </>
+            ) : (
+              <>
+                <Cloud className="w-4 h-4 text-amber-200" /> Sinkron Firestore
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleBackupLokal}
+            className="px-3 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-900/30 transition border border-indigo-400/30 cursor-pointer"
+            title="Unduh salinan cadangan lengkap database lokal (format JSON) ke perangkat Anda sebagai tindakan preventif"
+          >
+            <Database className="w-4 h-4 text-indigo-200" /> Backup Lokal
+          </button>
         </div>
       </div>
+
+      {/* Cloud Sync Feedback Banner */}
+      {cloudSyncFeedback && (
+        <div
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold animate-in fade-in transition-all ${
+            cloudSyncFeedback.success
+              ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+              : 'bg-rose-950/80 border-rose-500/50 text-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {cloudSyncFeedback.success ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{cloudSyncFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setCloudSyncFeedback(null)}
+            className="text-slate-400 hover:text-white px-2 py-0.5"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Filter Spesifik Wilayah Kerja Bhabinkamtibmas */}
       <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 text-white shadow-xl space-y-3">
@@ -394,10 +516,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
-        {/* Volume Bibit Ditanam */}
+        {/* Volume Benih Ditanam */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white shadow-lg">
           <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">
-            Jumlah Bibit Ditanam
+            Jumlah Benih yang Ditanam
           </span>
           <div className="text-xl sm:text-2xl font-extrabold text-purple-400 my-1">
             {(totalBibitKg / 1000).toFixed(2)} <span className="text-xs text-slate-300 font-medium">Ton</span>
@@ -836,6 +958,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg shadow"
               >
                 Hapus Permanen & Catat Audit Log
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backup Lokal Success & Information Modal */}
+      {backupModalData && backupModalData.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl w-full max-w-lg p-5 sm:p-6 text-white shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                    Backup Database Lokal Berhasil
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Salinan file JSON telah diunduh ke perangkat Anda
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Tersimpan
+              </span>
+            </div>
+
+            {/* File Info Box */}
+            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <FileJson className="w-4 h-4 text-amber-400" /> Nama Berkas:
+                </span>
+                <span className="font-mono text-[11px] text-amber-300 font-bold break-all">
+                  {backupModalData.filename}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-900 pt-1.5">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4 text-indigo-400" /> Ukuran File:
+                </span>
+                <span className="font-mono text-slate-200">
+                  {(backupModalData.sizeBytes / 1024).toFixed(2)} KB ({backupModalData.sizeBytes.toLocaleString('id-ID')} bytes)
+                </span>
+              </div>
+            </div>
+
+            {/* Summary Statistics of Backed Up Data */}
+            <div>
+              <span className="text-[11px] uppercase tracking-wider font-extrabold text-slate-400 block mb-2">
+                Rangkuman Entitas Data yang Disalin:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-400 block">Laporan Budidaya</span>
+                  <span className="text-base font-extrabold text-emerald-400">
+                    {backupModalData.summary.totalReports}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-400 block">Akun User/Bhabin</span>
+                  <span className="text-base font-extrabold text-sky-400">
+                    {backupModalData.summary.totalUsers}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-400 block">Audit Log</span>
+                  <span className="text-base font-extrabold text-amber-400">
+                    {backupModalData.summary.totalAuditLogs}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-400 block">Notifikasi</span>
+                  <span className="text-base font-extrabold text-purple-400">
+                    {backupModalData.summary.totalNotifications}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Security & Preventative Notice */}
+            <div className="p-3 bg-indigo-950/40 border border-indigo-800/40 rounded-xl text-[11px] text-indigo-200/90 leading-relaxed flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <strong>Tindakan Preventif Terjamin:</strong> File salinan cadangan JSON ini memuat seluruh data lahan, riwayat koordinat GPS, foto dokumentasi, dan catatan audit log secara komprehensif. Simpan berkas ini di penyimpanan lokal atau flashdisk eksternal sebagai proteksi kehilangan data.
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
+              <button
+                onClick={handleBackupLokal}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Unduh Ulang
+              </button>
+
+              <button
+                onClick={() => setBackupModalData(null)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-md cursor-pointer"
+              >
+                Tutup & Selesai
               </button>
             </div>
           </div>

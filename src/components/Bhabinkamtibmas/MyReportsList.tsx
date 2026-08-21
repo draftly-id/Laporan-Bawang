@@ -13,6 +13,10 @@ import {
   MessageSquare,
   Sprout,
   Users,
+  WifiOff,
+  CloudCheck,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 import { LaporanBudidaya, UserAccount, StatusLaporan } from '../../types';
 import { RevisionModal } from './RevisionModal';
@@ -154,9 +158,21 @@ export const MyReportsList: React.FC<MyReportsListProps> = ({
               {/* Header Info */}
               <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-3">
                 <div>
-                  <span className="text-[10px] font-mono font-bold text-amber-400">
-                    {report.id}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <span className="text-[10px] font-mono font-bold text-amber-400">
+                      {report.id}
+                    </span>
+                    {report.syncStatus === 'PENDING_SYNC' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                        <WifiOff className="w-2.5 h-2.5" /> Tersimpan Offline
+                      </span>
+                    )}
+                    {report.isOfflineCreated && report.syncStatus === 'SYNCED' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                        <CloudCheck className="w-2.5 h-2.5" /> Sinkron Online
+                      </span>
+                    )}
+                  </div>
                   <h3 className="font-bold text-sm text-white">
                     {report.kelompokTani.namaKelompok || 'Poktan Bawang Putih'}
                   </h3>
@@ -168,7 +184,9 @@ export const MyReportsList: React.FC<MyReportsListProps> = ({
                   </div>
                 </div>
 
-                <div>{getStatusBadge(report.status)}</div>
+                <div className="flex flex-col items-end gap-1">
+                  {getStatusBadge(report.status)}
+                </div>
               </div>
 
               {/* Tonnage, Area & Seed Variety Quick Grid */}

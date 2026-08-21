@@ -62,7 +62,18 @@ export function getUsers(): UserAccount[] {
       const stored: UserAccount[] = JSON.parse(raw);
       const mergedMap = new Map<string, UserAccount>();
       INITIAL_USERS.forEach((u) => mergedMap.set(u.id, u));
-      stored.forEach((u) => mergedMap.set(u.id, u));
+      stored.forEach((u) => {
+        // Automatically migrate legacy admin name if needed
+        if (u.id === 'user-admin' || u.role === 'ADMIN_PUSAT') {
+          mergedMap.set(u.id, {
+            ...u,
+            name: 'Admin Polres Enrekang',
+            rank: u.rank === 'BRIPTU' ? 'ADMIN' : u.rank,
+          });
+        } else {
+          mergedMap.set(u.id, u);
+        }
+      });
       return Array.from(mergedMap.values()).filter(
         (u) => !u.polres.toLowerCase().includes('toraja')
       );
@@ -81,23 +92,17 @@ export function saveUsers(users: UserAccount[]) {
 export function getCurrentUser(): UserAccount | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (raw === 'LOGGED_OUT') return null;
-    if (raw) {
-      const u = JSON.parse(raw);
-      const allUsers = getUsers();
-      const matched = allUsers.find((item) => item.id === u.id);
-      if (matched) return matched;
+    if (raw === 'LOGGED_OUT' || !raw) return null;
+    const u = JSON.parse(raw);
+    const allUsers = getUsers();
+    const matched = allUsers.find((item) => item.id === u.id);
+    if (matched) return matched;
+    if (u.role === 'ADMIN_PUSAT') {
+      return { ...u, name: 'Admin Polres Enrekang' };
     }
   } catch (e) {
     console.error('Failed to parse current user', e);
   }
-  
-  // Default to first user (Admin) if not explicitly logged out
-  if (localStorage.getItem(STORAGE_KEYS.CURRENT_USER) === null) {
-    const allUsers = getUsers();
-    return allUsers[0] || null;
-  }
-  
   return null;
 }
 
@@ -155,6 +160,44 @@ export function loginWithCredentials(
     return matched;
   }
   return null;
+}
+
+export function updateAdminPassword(newPassword: string, adminUsername?: string): boolean {
+  try {
+    const allUsers = getUsers();
+    let found = false;
+    const updatedUsers = allUsers.map((u) => {
+      const isTargetAdmin =
+        u.role === 'ADMIN_PUSAT' ||
+        u.id === 'user-admin' ||
+        (adminUsername && u.username.toLowerCase() === adminUsername.trim().toLowerCase());
+
+      if (isTargetAdmin) {
+        found = true;
+        return {
+          ...u,
+          password: newPassword.trim(),
+        };
+      }
+      return u;
+    });
+
+    if (found) {
+      saveUsers(updatedUsers);
+      addAuditLog({
+        actorId: 'user-admin',
+        actorName: 'Admin Polres Enrekang',
+        actorRole: 'ADMIN_PUSAT',
+        actionType: 'USER_MANAGEMENT',
+        targetInfo: 'Akun Admin',
+        details: 'Kata sandi akun Admin Satbinmas Polres Enrekang berhasil diperbarui / direset.',
+      });
+      return true;
+    }
+  } catch (err) {
+    console.error('Error updating admin password:', err);
+  }
+  return false;
 }
 
 // 2. Reports Management
@@ -265,6 +308,15 @@ export function submitOrUpdateReport(
   }
 
   saveReports(reports);
+
+  // Sync to Cloud Firestore if available and not a draft
+  try {
+    import('./firestoreSync').then(({ firestoreSync }) => {
+      if (!isDraft) {
+        firestoreSync.saveReportToCloud(targetReport).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch (_) {}
 
   // If not draft, trigger real-time notification to ADMIN_PUSAT
   if (!isDraft) {
@@ -409,6 +461,13 @@ export function handleRevisionDecision(
 
   saveReports(reports);
 
+  // Sync revision update to Cloud Firestore
+  try {
+    import('./firestoreSync').then(({ firestoreSync }) => {
+      firestoreSync.saveReportToCloud(report).catch(() => {});
+    }).catch(() => {});
+  } catch (_) {}
+
   // Notify the specific Bhabinkamtibmas officer!
   addNotification({
     recipientUserId: rev.userId,
@@ -448,6 +507,13 @@ export function adminDeleteReport(laporanId: string, reason: string) {
 
   reports = reports.filter((r) => r.id !== laporanId);
   saveReports(reports);
+
+  // Sync deletion to Cloud Firestore
+  try {
+    import('./firestoreSync').then(({ firestoreSync }) => {
+      firestoreSync.deleteReportFromCloud(laporanId).catch(() => {});
+    }).catch(() => {});
+  } catch (_) {}
 
   if (target) {
     addAuditLog({
@@ -562,32 +628,180 @@ export function savePanenData(laporanId: string, dataPanen: DataPanen) {
   const index = reports.findIndex((r) => r.id === laporanId);
   if (index === -1) throw new Error('Report not found');
 
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  const isOffline = !isOnline;
+  const now = new Date().toLocaleString('id-ID');
+
   reports[index].dataPanen = dataPanen;
   reports[index].dataLahan.produksiPanenKg = dataPanen.hasilPanenKg;
   reports[index].statusTanaman = 'Siap Panen (90+ HST)';
-  reports[index].tanggalUpdate = new Date().toLocaleString('id-ID');
+  reports[index].tanggalUpdate = now;
+
+  if (isOffline) {
+    reports[index].syncStatus = 'PENDING_SYNC';
+    reports[index].offlineSavedAt = now;
+  }
 
   saveReports(reports);
 
+  if (currentUser) {
+    if (!isOffline) {
+      addAuditLog({
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorRole: currentUser.role,
+        actionType: 'UPDATE_REPORT',
+        laporanId,
+        targetInfo: `Hasil Panen Laporan ${laporanId}`,
+        details: `Menginput realisasi panen: Tgl ${dataPanen.tanggalPanen}, Luas ${dataPanen.luasPanenM2} m², Produksi ${(dataPanen.hasilPanenKg / 1000).toFixed(2)} Ton.`,
+      });
+
+      addNotification({
+        recipientUserId: 'ADMIN_ALL',
+        targetRole: 'ADMIN_PUSAT',
+        title: 'Realisasi Hasil Panen Terinput',
+        message: `${currentUser.name} menginput hasil produksi panen untuk ${reports[index].kelompokTani.namaKelompok} sebesar ${(dataPanen.hasilPanenKg / 1000).toFixed(2)} Ton.`,
+        type: 'NEW_REPORT',
+        laporanId,
+        priority: 'high',
+      });
+    } else {
+      addAuditLog({
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorRole: currentUser.role,
+        actionType: 'UPDATE_REPORT',
+        laporanId,
+        targetInfo: `[OFFLINE] Hasil Panen Laporan ${laporanId}`,
+        details: `Tersimpan secara offline: Tgl ${dataPanen.tanggalPanen}, Hasil ${(dataPanen.hasilPanenKg / 1000).toFixed(2)} Ton. Menunggu sinkronisasi internet.`,
+      });
+    }
+  }
+}
+
+// 7. Full Database Backup & Preventative Data Export
+export interface DatabaseBackupPayload {
+  metadata: {
+    systemName: string;
+    version: string;
+    exportTimestamp: string;
+    exportDateFormatted: string;
+    exportedBy: string;
+    exportedByRole: string;
+    organization: string;
+    description: string;
+  };
+  summary: {
+    totalReports: number;
+    totalUsers: number;
+    totalAuditLogs: number;
+    totalNotifications: number;
+    totalLuasTanamM2: number;
+    totalProduksiPanenKg: number;
+    totalBibitKg: number;
+  };
+  data: {
+    users: UserAccount[];
+    reports: LaporanBudidaya[];
+    notifications: NotificationItem[];
+    auditLogs: AuditLog[];
+  };
+}
+
+export function generateDatabaseBackup(): DatabaseBackupPayload {
+  const users = getUsers();
+  const reports = getReports();
+  const notifications = getNotifications();
+  const auditLogs = getAuditLogs();
+  const currentUser = getCurrentUser();
+
+  const totalLuas = reports.reduce((acc, r) => acc + (r.dataLahan?.luasTanamM2 || 0), 0);
+  const totalPanen = reports.reduce((acc, r) => acc + (r.dataLahan?.produksiPanenKg || 0), 0);
+  const totalBibit = reports.reduce((acc, r) => acc + (r.dataLahan?.jumlahBibitKg || 0), 0);
+
+  const now = new Date();
+
+  return {
+    metadata: {
+      systemName: 'SIPERBAWA - POLRES ENREKANG (Sistem Informasi Pendataan Budidaya Bawang)',
+      version: '4.0.0',
+      exportTimestamp: now.toISOString(),
+      exportDateFormatted: now.toLocaleString('id-ID', {
+        dateStyle: 'full',
+        timeStyle: 'medium',
+      }),
+      exportedBy: currentUser ? `${currentUser.name} (${currentUser.rank || 'ADMIN'})` : 'Admin Polres Enrekang',
+      exportedByRole: currentUser?.role || 'ADMIN_PUSAT',
+      organization: 'Satbinmas Polres Enrekang - Polda Sulawesi Selatan',
+      description: 'Salinan cadangan database lokal lengkap (preventif offline backup) mencakup data laporan budidaya, kelompok tani, foto dokumentasi geospasial, akun pengguna, dan riwayat audit log.',
+    },
+    summary: {
+      totalReports: reports.length,
+      totalUsers: users.length,
+      totalAuditLogs: auditLogs.length,
+      totalNotifications: notifications.length,
+      totalLuasTanamM2: totalLuas,
+      totalProduksiPanenKg: totalPanen,
+      totalBibitKg: totalBibit,
+    },
+    data: {
+      users,
+      reports,
+      notifications,
+      auditLogs,
+    },
+  };
+}
+
+export function downloadDatabaseBackup(): {
+  filename: string;
+  sizeBytes: number;
+  summary: DatabaseBackupPayload['summary'];
+} {
+  const backupPayload = generateDatabaseBackup();
+  const jsonString = JSON.stringify(backupPayload, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+  const currentUser = getCurrentUser();
+
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const filename = `BACKUP_DATABASE_SIPERBAWA_POLRES_ENREKANG_${dateStr}.json`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  // Add audit log entry for this backup
   if (currentUser) {
     addAuditLog({
       actorId: currentUser.id,
       actorName: currentUser.name,
       actorRole: currentUser.role,
-      actionType: 'UPDATE_REPORT',
-      laporanId,
-      targetInfo: `Hasil Panen Laporan ${laporanId}`,
-      details: `Menginput realisasi panen: Tgl ${dataPanen.tanggalPanen}, Luas ${dataPanen.luasPanenM2} m², Produksi ${(dataPanen.hasilPanenKg / 1000).toFixed(2)} Ton.`,
+      actionType: 'BACKUP_DATABASE',
+      targetInfo: 'Database Salinan Cadangan (JSON)',
+      details: `Mengunduh backup lokal lengkap database (${backupPayload.summary.totalReports} laporan, ${backupPayload.summary.totalUsers} akun pengguna, ${backupPayload.summary.totalAuditLogs} audit log). File: ${filename}`,
     });
 
     addNotification({
-      recipientUserId: 'ADMIN_ALL',
+      recipientUserId: currentUser.id,
       targetRole: 'ADMIN_PUSAT',
-      title: 'Realisasi Hasil Panen Terinput',
-      message: `${currentUser.name} menginput hasil produksi panen untuk ${reports[index].kelompokTani.namaKelompok} sebesar ${(dataPanen.hasilPanenKg / 1000).toFixed(2)} Ton.`,
-      type: 'NEW_REPORT',
-      laporanId,
-      priority: 'high',
+      title: 'Backup Database Lokal Berhasil Diunduh',
+      message: `Salinan database (${filename}) berhasil dibuat dan disimpan ke perangkat lokal. Total ${backupPayload.summary.totalReports} laporan tersimpan aman.`,
+      type: 'SYSTEM_ALERT',
+      priority: 'medium',
     });
   }
+
+  return {
+    filename,
+    sizeBytes: blob.size,
+    summary: backupPayload.summary,
+  };
 }
+

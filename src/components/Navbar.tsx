@@ -19,6 +19,8 @@ import {
   subscribeState,
   logoutUser,
 } from '../services/appState';
+import { OfflineSyncBanner } from './OfflineSyncBanner';
+import siperbawaLogo from '../assets/images/siperbawa_official_logo_1787295974614.jpg';
 
 interface NavbarProps {
   onOpenNotifications: () => void;
@@ -73,8 +75,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/30 shadow-sm overflow-hidden p-1 flex items-center justify-center shrink-0">
               <img
-                src="/src/assets/images/garlic_app_logo_1787017115652.jpg"
-                alt="Logo Siperbawa Bawang Putih"
+                src={siperbawaLogo || '/logo.png'}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                }}
+                alt="Logo Siperbawa Polres Enrekang"
                 className="w-full h-full object-cover rounded-xl"
                 referrerPolicy="no-referrer"
               />
@@ -97,6 +102,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Quick Actions & Role Switcher */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Offline Sync Status Badge */}
+            <OfflineSyncBanner compact={true} />
+
             {/* Google Sheets Integration Quick Trigger (Only for Admin Polres) */}
             {onOpenGoogleSheets && currentUser.role === 'ADMIN_PUSAT' && (
               <button

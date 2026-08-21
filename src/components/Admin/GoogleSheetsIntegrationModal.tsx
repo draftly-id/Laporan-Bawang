@@ -208,7 +208,7 @@ export const GoogleSheetsIntegrationModal: React.FC<GoogleSheetsModalProps> = ({
     setSuccessMsg(null);
 
     try {
-      await clearSpreadsheetDataRows(activeToken, selectedFileId, 'A2:Z1000');
+      await clearSpreadsheetDataRows(activeToken, selectedFileId);
       setSuccessMsg(
         `Berhasil mengosongkan seluruh baris data pada spreadsheet "${targetFile?.name}".`
       );

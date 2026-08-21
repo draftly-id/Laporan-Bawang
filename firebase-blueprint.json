@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "LaporanBudidaya": {
+      "title": "Laporan Budidaya",
+      "description": "Data laporan pendataan budidaya bawang merah oleh Bhabinkamtibmas Polres Enrekang",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID unik laporan"
+        },
+        "userId": {
+          "type": "string",
+          "description": "ID petugas bhabin pembuat laporan"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Nama petugas bhabinkamtibmas"
+        },
+        "userPolsek": {
+          "type": "string",
+          "description": "Wilayah Polsek binaan"
+        },
+        "userPolres": {
+          "type": "string",
+          "description": "Polres Enrekang"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status laporan"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp pembuatan laporan"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp pembaruan laporan"
+        }
+      },
+      "required": ["id", "userId", "userName", "status", "createdAt"]
+    },
+    "UserAccount": {
+      "title": "User Account",
+      "description": "Akun pengguna sistem (Bhabinkamtibmas & Admin)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID akun user"
+        },
+        "name": {
+          "type": "string",
+          "description": "Nama lengkap personel"
+        },
+        "role": {
+          "type": "string",
+          "description": "Peran pengguna (ADMIN_PUSAT / BHABINKAMTIBMAS)"
+        }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Catatan aktivitas dan transparansi sistem",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID unik log"
+        },
+        "actionType": {
+          "type": "string",
+          "description": "Jenis aksi"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Waktu log dicatat"
+        }
+      },
+      "required": ["id", "actionType", "timestamp"]
+    },
+    "NotificationItem": {
+      "title": "Notification Item",
+      "description": "Pemberitahuan sistem internal",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID notifikasi"
+        },
+        "title": {
+          "type": "string",
+          "description": "Judul notifikasi"
+        },
+        "message": {
+          "type": "string",
+          "description": "Isi pesan"
+        }
+      },
+      "required": ["id", "title", "message"]
+    }
+  },
+  "firestore": {
+    "/laporan_budidaya/{laporanId}": {
+      "schema": "LaporanBudidaya",
+      "description": "Koleksi data laporan budidaya bawang merah"
+    },
+    "/users_account/{userId}": {
+      "schema": "UserAccount",
+      "description": "Koleksi data akun pengguna sistem"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Koleksi jejak audit aktivitas sistem"
+    },
+    "/notifications/{notifId}": {
+      "schema": "NotificationItem",
+      "description": "Koleksi notifikasi aplikasi"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   Send,
@@ -9,6 +9,9 @@ import {
   FileText,
   AlertCircle,
   CheckCircle2,
+  Wifi,
+  WifiOff,
+  Database,
 } from 'lucide-react';
 import {
   UserAccount,
@@ -20,7 +23,7 @@ import {
 } from '../../types';
 import { GpsPickerMap } from '../GpsPickerMap';
 import { WatermarkCanvas } from '../WatermarkCanvas';
-import { submitOrUpdateReport } from '../../services/appState';
+import { submitReportOfflineFirst } from '../../services/offlineSyncService';
 
 interface ReportFormProps {
   currentUser: UserAccount;
@@ -116,6 +119,21 @@ export const ReportForm: React.FC<ReportFormProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleAddPhoto = (photo: PhotoBukti) => {
     setBuktiFoto((prev) => [photo, ...prev]);
@@ -171,9 +189,17 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         buktiFoto,
       };
 
-      submitOrUpdateReport(payload, isDraft);
+      const result = submitReportOfflineFirst(payload, isDraft);
       setIsSubmitting(false);
-      onSuccess();
+
+      if (result.wasOffline && !isDraft) {
+        setSuccessNotice('Laporan tersimpan di penyimpanan lokal (offline). Data akan otomatis disinkronkan ke server pusat saat perangkat terhubung ke internet.');
+        setTimeout(() => {
+          onSuccess();
+        }, 1200);
+      } else {
+        onSuccess();
+      }
     } catch (err: any) {
       setErrorText(err.message || 'Gagal menyimpan laporan.');
       setIsSubmitting(false);
@@ -183,7 +209,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 text-white shadow-xl space-y-6">
       {/* Header Form */}
-      <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+      <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl">
             <Sprout className="w-6 h-6" />
@@ -197,7 +223,41 @@ export const ReportForm: React.FC<ReportFormProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Online / Offline status badge in Form Header */}
+        <div className="flex items-center gap-2">
+          {!isOnline ? (
+            <div className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 animate-pulse">
+              <WifiOff className="w-3.5 h-3.5" />
+              <span>Offline • Simpan Lokal Aktif</span>
+            </div>
+          ) : (
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5">
+              <Wifi className="w-3.5 h-3.5" />
+              <span>Online • Terhubung ke Pusat</span>
+            </div>
+          )}
+        </div>
       </div>
+
+      {!isOnline && (
+        <div className="p-3.5 bg-amber-950/40 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-start gap-2.5">
+          <Database className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-bold">Mode Pengisian Offline Aktif:</span>
+            <p className="text-[11px] text-amber-300/90 leading-relaxed">
+              Anda sedang berada di area tanpa koneksi internet (kebun/remote area). Laporan yang Anda simpan/kirim akan diamankan di penyimpanan lokal (localStorage) dan akan otomatis disinkronkan ke server saat kembali online.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {successNotice && (
+        <div className="p-3 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs rounded-xl flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{successNotice}</span>
+        </div>
+      )}
 
       {errorText && (
         <div className="p-3 bg-rose-950/80 border border-rose-800 text-rose-300 text-xs rounded-xl flex items-center gap-2">

@@ -17,8 +17,11 @@ import {
   PhoneCall,
   Navigation,
   Droplets,
+  Database,
+  CheckCircle2,
 } from 'lucide-react';
 import { LaporanBudidaya } from '../../types';
+import { downloadDatabaseBackup } from '../../services/appState';
 
 interface ReportExportModalProps {
   isOpen: boolean;
@@ -34,8 +37,15 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
   onOpenGoogleSheets,
 }) => {
   const [viewFormat, setViewFormat] = useState<'CARDS' | 'TABLE'>('CARDS');
+  const [backupDownloadedMsg, setBackupDownloadedMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleDownloadBackup = () => {
+    const res = downloadDatabaseBackup();
+    setBackupDownloadedMsg(`Backup lokal ${res.filename} berhasil diunduh (${res.summary.totalReports} laporan).`);
+    setTimeout(() => setBackupDownloadedMsg(null), 5000);
+  };
 
   const handleDownloadCsv = () => {
     const headers = [
@@ -152,7 +162,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
     const summaryHtml = `
   <div class="summary-box">
     <div><strong>Total Luas Tanam:</strong> ${(totalLuasTanam / 10000).toFixed(2)} Ha (${totalLuasTanam.toLocaleString('id-ID')} m²)</div>
-    <div><strong>Total Kebutuhan Bibit:</strong> ${(totalBibit / 1000).toFixed(2)} Ton (${totalBibit.toLocaleString('id-ID')} Kg)</div>
+    <div><strong>Total Benih yang Ditanam:</strong> ${(totalBibit / 1000).toFixed(2)} Ton (${totalBibit.toLocaleString('id-ID')} Kg)</div>
     <div><strong>Proyeksi Hasil Panen:</strong> ${(totalPanen / 1000).toFixed(2)} Ton (${totalPanen.toLocaleString('id-ID')} Kg)</div>
   </div>
   <br/>
@@ -287,24 +297,47 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
             </button>
           </div>
 
-          {/* Export Action Buttons: Unduh CSV & Unduh Dokumen PDF */}
+          {/* Export Action Buttons: Unduh CSV, Unduh Dokumen PDF, & Backup Database JSON */}
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleDownloadBackup}
+              className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-md border border-indigo-400/30 transition cursor-pointer"
+              title="Unduh seluruh data database dalam bentuk file JSON sebagai backup lokal preventif"
+            >
+              <Database className="w-4 h-4 text-indigo-200" /> Backup Database (JSON)
+            </button>
+
+            <button
               onClick={handleDownloadCsv}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg flex items-center gap-1.5 shadow border border-slate-700 transition"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg flex items-center gap-1.5 shadow border border-slate-700 transition cursor-pointer"
             >
               <Download className="w-4 h-4 text-amber-400" /> Unduh CSV
             </button>
 
             <button
               onClick={handlePrintPdf}
-              className="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold rounded-lg flex items-center gap-1.5 shadow transition"
+              className="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold rounded-lg flex items-center gap-1.5 shadow transition cursor-pointer"
               title="Simpan atau cetak dokumen laporan resmi ke format PDF"
             >
               <FileText className="w-4 h-4" /> Unduh Dokumen PDF
             </button>
           </div>
         </div>
+
+        {backupDownloadedMsg && (
+          <div className="mx-6 mt-3 p-3 bg-indigo-950/80 border border-indigo-500/50 rounded-xl text-xs text-indigo-200 flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{backupDownloadedMsg}</span>
+            </div>
+            <button
+              onClick={() => setBackupDownloadedMsg(null)}
+              className="text-slate-400 hover:text-white px-2 py-0.5"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Document Content Area */}
         <div className="p-6 overflow-y-auto space-y-6 text-slate-100 bg-slate-900 print:bg-white print:text-black print:p-0">
@@ -334,7 +367,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
 
             <div className="p-3 bg-slate-950 print:bg-gray-100 rounded-xl border-2 border-slate-800 print:border-black">
               <span className="text-[10px] uppercase text-slate-400 print:text-gray-700 block font-bold">
-                Total Kebutuhan Bibit
+                Total Benih yang Ditanam
               </span>
               <span className="text-lg font-extrabold text-sky-300 print:text-black">
                 {(totalBibit / 1000).toFixed(2)} Ton ({totalBibit.toLocaleString('id-ID')} Kg)

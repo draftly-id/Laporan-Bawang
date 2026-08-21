@@ -23,12 +23,14 @@ import {
   subscribeState,
   logoutUser,
 } from './services/appState';
+import { firestoreSync } from './services/firestoreSync';
 
 import { Navbar } from './components/Navbar';
 import { NotificationDrawer } from './components/NotificationDrawer';
 import { PredictiveAnalysisModal } from './components/PredictiveAnalysisModal';
 import { GoogleSheetsIntegrationModal } from './components/Admin/GoogleSheetsIntegrationModal';
 import { WeatherBMKGCard } from './components/WeatherBMKGCard';
+import { OfflineSyncBanner } from './components/OfflineSyncBanner';
 
 // Bhabinkamtibmas Components
 import { MyReportsList } from './components/Bhabinkamtibmas/MyReportsList';
@@ -72,6 +74,7 @@ export default function App() {
 
   useEffect(() => {
     refreshData();
+    firestoreSync.init().catch(() => {});
     return subscribeState(refreshData);
   }, []);
 
@@ -117,6 +120,9 @@ export default function App() {
 
       {/* Main Body Layout */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Offline State & Queue Synchronization Banner */}
+        <OfflineSyncBanner />
+
         {/* Role Navigation Bar */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm dark:shadow-md transition-colors">
           {/* Active Context Identity */}
