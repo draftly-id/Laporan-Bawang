@@ -32,6 +32,10 @@ import {
   Camera,
   ChevronRight,
   User,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpRight,
+  Activity,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -280,6 +284,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onRefresh();
   };
 
+  // Executive KPI Summary Calculations (All-time and Current Month)
+  const now = new Date();
+  const currentMonthStr = now.toISOString().slice(0, 7);
+  const currentMonthName = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthStr = lastMonthDate.toISOString().slice(0, 7);
+
+  const sambangBulanIni = dailyReports.filter((r) => r.tanggalKunjungan?.startsWith(currentMonthStr)).length;
+  const sambangBulanLalu = dailyReports.filter((r) => r.tanggalKunjungan?.startsWith(lastMonthStr)).length;
+  const sambangGrowthPercent =
+    sambangBulanLalu > 0
+      ? (((sambangBulanIni - sambangBulanLalu) / sambangBulanLalu) * 100).toFixed(1)
+      : sambangBulanIni > 0
+      ? '+100'
+      : '0.0';
+
+  const totalLahanAktifAll = reports.length;
+  const totalLuasLahanAktifHaAll = (
+    reports.reduce((acc, r) => acc + (r.dataLahan?.luasTanamM2 || 0), 0) / 10000
+  ).toFixed(2);
+  const totalKelompokTaniAll = new Set(
+    reports.map((r) => r.kelompokTani?.namaKelompok || r.namaPetani).filter(Boolean)
+  ).size;
+  const totalPolsekAktifAll = new Set(
+    reports.map((r) => r.polsek).concat(dailyReports.map((r) => r.polsek)).filter(Boolean)
+  ).size;
+  const totalBhabinAktifAll = new Set(
+    reports.map((r) => r.userId || r.userName).concat(dailyReports.map((r) => r.userId || r.userName)).filter(Boolean)
+  ).size;
+  const totalEstimasiPanenTonAll = (
+    reports.reduce((acc, r) => acc + (r.dataLahan?.produksiPanenKg || 0), 0) / 1000
+  ).toFixed(1);
+  const totalRealisasiPanenTonAll = (
+    reports.reduce((acc, r) => acc + (r.dataPanen?.hasilPanenKg || 0), 0) / 1000
+  ).toFixed(2);
+
   return (
     <div className="space-y-6">
       {/* Welcome Banner & Role Context */}
@@ -411,6 +451,157 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
         </div>
       )}
+
+      {/* Ringkasan Statistik Operasional Eksekutif (Executive Summary Overview Cards) */}
+      <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 sm:p-5 text-white shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <Activity className="w-4 h-4" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                  Ringkasan Eksekutif & Overview Operasional
+                </h2>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 hidden sm:inline-block">
+                  Live Status
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Overview instan budidaya, intensitas sambang lapangan, dan tren kinerja operasional ({currentMonthName})
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto text-[11px] text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Presisi Bhabinkamtibmas Polres Enrekang</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Total Lahan Aktif */}
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-4 text-white shadow-md transition duration-200 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition" />
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Total Lahan Aktif
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-amber-400 mt-1 tracking-tight">
+                  {totalLahanAktifAll}{' '}
+                  <span className="text-xs font-semibold text-slate-300">Lahan</span>
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <Sprout className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <span className="text-slate-400 text-[11px] truncate">
+                {totalLuasLahanAktifHaAll} Ha ({totalKelompokTaniAll} Poktan)
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                <Layers className="w-3 h-3" />
+                <span>{totalPolsekAktifAll} Polsek</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Card 2: Total Kunjungan Sambang Bulan Ini */}
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800 hover:border-sky-500/40 rounded-2xl p-4 text-white shadow-md transition duration-200 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/5 rounded-full blur-2xl group-hover:bg-sky-500/10 transition" />
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Sambang Bulan Ini
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-sky-400 mt-1 tracking-tight">
+                  {sambangBulanIni}{' '}
+                  <span className="text-xs font-semibold text-slate-300">Kunjungan</span>
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
+                <CalendarCheck className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <span className="text-slate-400 text-[11px] truncate">
+                {dailyTodayCount} hari ini • {uniquePetaniSambang} Petani
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0">
+                <Camera className="w-3 h-3" />
+                <span>{totalFotoSambang} Foto</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Card 3: Tren Pertumbuhan & Keaktifan Personel */}
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800 hover:border-emerald-500/40 rounded-2xl p-4 text-white shadow-md transition duration-200 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition" />
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Tren Pertumbuhan Sambang
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1 tracking-tight flex items-center gap-1">
+                  <span>
+                    {Number(sambangGrowthPercent) >= 0 ? `+${sambangGrowthPercent}%` : `${sambangGrowthPercent}%`}
+                  </span>
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                {Number(sambangGrowthPercent) >= 0 ? (
+                  <TrendingUp className="w-5 h-5" />
+                ) : (
+                  <TrendingDown className="w-5 h-5" />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <span className="text-slate-400 text-[11px] truncate">
+                {totalBhabinAktifAll} Bhabin Aktif Melapor
+              </span>
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                <ArrowUpRight className="w-3 h-3" />
+                <span>Aktif</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Card 4: Proyeksi & Hasil Panen */}
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800 hover:border-purple-500/40 rounded-2xl p-4 text-white shadow-md transition duration-200 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/10 transition" />
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Proyeksi & Hasil Panen
+                </span>
+                <div className="text-2xl sm:text-3xl font-black text-purple-300 mt-1 tracking-tight">
+                  {totalEstimasiPanenTonAll}{' '}
+                  <span className="text-xs font-semibold text-slate-300">Ton Est.</span>
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <span className="text-purple-300 text-[11px] font-semibold truncate">
+                Riil: {totalRealisasiPanenTonAll} Ton ({laporanPanenList.length} Poktan)
+              </span>
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 shrink-0">
+                <span>Panen</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Filter Spesifik Wilayah Kerja Bhabinkamtibmas */}
       <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 text-white shadow-xl space-y-3">
