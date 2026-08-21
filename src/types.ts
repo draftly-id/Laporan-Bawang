@@ -5,16 +5,21 @@ export type UserStatus = 'AKTIF' | 'MUTASI' | 'PENSIUN' | 'NONAKTIF';
 export interface UserAccount {
   id: string;
   username: string; // NRP or Username
+  nrp?: string;
   password?: string; // Secret passcode
   name: string;
   rank: string; // e.g. BRIPKA, AIPDA, BRIPAD
   polres: string;
   polsek: string;
   wilayahBinaan: string; // Desa/Kelurahan & Kecamatan
+  desa?: string;
+  kecamatan?: string;
   role: UserRole;
   status: UserStatus;
   phone: string;
   avatarUrl?: string;
+  lastLogin?: string;
+  createdAt?: string;
 }
 
 export type StatusLaporan = 

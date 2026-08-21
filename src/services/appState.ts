@@ -89,6 +89,13 @@ export function getUsers(): UserAccount[] {
 export function saveUsers(users: UserAccount[]) {
   localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   notifyStateChanged();
+  try {
+    import('./firestoreSync').then(({ firestoreSync }) => {
+      users.forEach((u) => {
+        firestoreSync.saveUserToCloud(u).catch(() => {});
+      });
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 export function getCurrentUser(): UserAccount | null {
@@ -109,16 +116,40 @@ export function getCurrentUser(): UserAccount | null {
 }
 
 export function setCurrentUser(user: UserAccount) {
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+  const updatedUser: UserAccount = {
+    ...user,
+    lastLogin: new Date().toISOString(),
+    status: user.status || 'AKTIF',
+  };
+  localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedUser));
+
+  // Update in users collection list
+  try {
+    const allUsers = getUsers();
+    const index = allUsers.findIndex((u) => u.id === user.id);
+    if (index !== -1) {
+      allUsers[index] = { ...allUsers[index], ...updatedUser };
+    } else {
+      allUsers.push(updatedUser);
+    }
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(allUsers));
+  } catch (_) {}
+
   addAuditLog({
-    actorId: user.id,
-    actorName: user.name,
-    actorRole: user.role,
+    actorId: updatedUser.id,
+    actorName: updatedUser.name,
+    actorRole: updatedUser.role,
     actionType: 'USER_LOGIN',
-    targetInfo: `Akun: ${user.name}`,
-    details: `Pengguna ${user.name} (${user.rank}) berhasil masuk ke dalam sistem SIPERBAWA POLRI.`,
+    targetInfo: `Akun: ${updatedUser.name}`,
+    details: `Pengguna ${updatedUser.name} (${updatedUser.rank}) berhasil masuk ke dalam sistem SIPERBAWA POLRI.`,
   });
   notifyStateChanged();
+
+  try {
+    import('./firestoreSync').then(({ firestoreSync }) => {
+      firestoreSync.saveUserToCloud(updatedUser).catch(() => {});
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 export function logoutUser() {
@@ -897,6 +928,15 @@ export function submitOrUpdateDailyReport(
 
   saveDailyReports(dailyReports);
 
+  // Sync to Cloud Firestore if not draft
+  try {
+    import('./firestoreSync').then(({ firestoreSync }) => {
+      if (!isDraft) {
+        firestoreSync.saveDailyReportToCloud(targetReport).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch (_) {}
+
   if (currentUser) {
     addAuditLog({
       actorId: currentUser.id,
@@ -927,6 +967,14 @@ export function deleteDailyReport(id: string): boolean {
   const filtered = dailyReports.filter((r) => r.id !== id);
   if (filtered.length !== dailyReports.length) {
     saveDailyReports(filtered);
+
+    // Sync deletion to Cloud Firestore
+    try {
+      import('./firestoreSync').then(({ firestoreSync }) => {
+        firestoreSync.deleteDailyReportFromCloud(id).catch(() => {});
+      }).catch(() => {});
+    } catch (_) {}
+
     const currentUser = getCurrentUser();
     if (currentUser) {
       addAuditLog({

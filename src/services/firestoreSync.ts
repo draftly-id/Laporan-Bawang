@@ -25,8 +25,10 @@ import {
   saveReports,
   saveDailyReports,
   saveUsers,
+  saveNotifications,
   subscribeState,
 } from './appState';
+import { INITIAL_USERS } from '../data/mockData';
 
 // Firestore collection names
 export const FIRESTORE_COLLECTIONS = {
@@ -42,6 +44,9 @@ class FirestoreSyncService {
   private isInitialized = false;
   private isOnline = navigator.onLine;
   private unsubscribeReports: (() => void) | null = null;
+  private unsubscribeUsers: (() => void) | null = null;
+  private unsubscribeDailyReports: (() => void) | null = null;
+  private unsubscribeAuditLogs: (() => void) | null = null;
   private listeners: Set<(status: { isConnected: boolean; lastSync: Date | null; error?: string }) => void> = new Set();
   private lastSyncTime: Date | null = null;
   private syncError: string | null = null;
@@ -96,9 +101,10 @@ class FirestoreSyncService {
     }
   }
 
-  // Real-time listener for Reports from Firestore
+  // Real-time listeners for all core collections from Firestore
   private async startRealtimeListeners() {
     try {
+      // 1. Reports listener
       const reportsCol = collection(db, FIRESTORE_COLLECTIONS.REPORTS);
       this.unsubscribeReports = onSnapshot(
         reportsCol,
@@ -109,12 +115,10 @@ class FirestoreSyncService {
               cloudReports.push(docSnap.data() as LaporanBudidaya);
             });
 
-            // Merge cloud reports with local
             const localReports = getReports();
             const localMap = new Map(localReports.map((r) => [r.id, r]));
 
             cloudReports.forEach((cr) => {
-              // Only override if cloud is newer or local doesn't exist
               localMap.set(cr.id, cr);
             });
 
@@ -124,7 +128,6 @@ class FirestoreSyncService {
                 !r.dataLahan?.kabupaten?.toLowerCase().includes('toraja')
             );
 
-            // Update local storage without triggering redundant loops
             localStorage.setItem('siperbawa_reports_v4_clean', JSON.stringify(merged));
             this.lastSyncTime = new Date();
             this.syncError = null;
@@ -132,9 +135,99 @@ class FirestoreSyncService {
           }
         },
         (error) => {
-          console.warn('Firestore snapshot error:', error);
+          console.warn('Firestore reports snapshot error:', error);
           this.syncError = error.message;
           this.notifyStatus();
+        }
+      );
+
+      // 2. Users Account listener
+      const usersCol = collection(db, FIRESTORE_COLLECTIONS.USERS);
+      this.unsubscribeUsers = onSnapshot(
+        usersCol,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const cloudUsers: UserAccount[] = [];
+            snapshot.forEach((docSnap) => {
+              cloudUsers.push(docSnap.data() as UserAccount);
+            });
+
+            const localUsers = getUsers();
+            const userMap = new Map(localUsers.map((u) => [u.id, u]));
+
+            cloudUsers.forEach((cu) => {
+              userMap.set(cu.id, cu);
+            });
+
+            const mergedUsers = Array.from(userMap.values()).filter(
+              (u) => !u.polres?.toLowerCase().includes('toraja')
+            );
+
+            localStorage.setItem('siperbawa_users_v4_clean', JSON.stringify(mergedUsers));
+            this.lastSyncTime = new Date();
+            this.syncError = null;
+            this.notifyStatus();
+          }
+        },
+        (error) => {
+          console.warn('Firestore users snapshot error:', error);
+        }
+      );
+
+      // 3. Daily Reports listener
+      const dailyReportsCol = collection(db, FIRESTORE_COLLECTIONS.DAILY_REPORTS);
+      this.unsubscribeDailyReports = onSnapshot(
+        dailyReportsCol,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const cloudDaily: LaporanHarian[] = [];
+            snapshot.forEach((docSnap) => {
+              cloudDaily.push(docSnap.data() as LaporanHarian);
+            });
+
+            const localDaily = getDailyReports();
+            const dailyMap = new Map(localDaily.map((d) => [d.id, d]));
+
+            cloudDaily.forEach((cd) => {
+              dailyMap.set(cd.id, cd);
+            });
+
+            localStorage.setItem('siperbawa_daily_reports_v4_clean', JSON.stringify(Array.from(dailyMap.values())));
+            this.lastSyncTime = new Date();
+            this.syncError = null;
+            this.notifyStatus();
+          }
+        },
+        (error) => {
+          console.warn('Firestore daily reports snapshot error:', error);
+        }
+      );
+
+      // 4. Audit Logs listener
+      const auditCol = collection(db, FIRESTORE_COLLECTIONS.AUDIT_LOGS);
+      this.unsubscribeAuditLogs = onSnapshot(
+        auditCol,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const cloudLogs: AuditLog[] = [];
+            snapshot.forEach((docSnap) => {
+              cloudLogs.push(docSnap.data() as AuditLog);
+            });
+
+            const localLogs = getAuditLogs();
+            const logMap = new Map(localLogs.map((l) => [l.id, l]));
+
+            cloudLogs.forEach((cl) => {
+              logMap.set(cl.id, cl);
+            });
+
+            localStorage.setItem('siperbawa_audit_logs_v4_clean', JSON.stringify(Array.from(logMap.values()).slice(0, 100)));
+            this.lastSyncTime = new Date();
+            this.notifyStatus();
+          }
+        },
+        (error) => {
+          console.warn('Firestore audit logs snapshot error:', error);
         }
       );
     } catch (err: any) {
@@ -145,53 +238,79 @@ class FirestoreSyncService {
   // Sync initial seed or existing local data to Firestore if cloud collection is empty
   public async initialCloudSync(): Promise<{ success: boolean; syncedCount: number; message: string }> {
     try {
-      const reportsCol = collection(db, FIRESTORE_COLLECTIONS.REPORTS);
-      const snapshot = await getDocs(reportsCol);
+      // 1. Sync Users
+      const usersCol = collection(db, FIRESTORE_COLLECTIONS.USERS);
+      const userSnapshot = await getDocs(usersCol);
+      const localUsers = getUsers();
 
+      if (userSnapshot.empty && localUsers.length > 0) {
+        const batch = writeBatch(db);
+        localUsers.forEach((u) => {
+          batch.set(doc(db, FIRESTORE_COLLECTIONS.USERS, u.id), u);
+        });
+        await batch.commit();
+      } else if (!userSnapshot.empty) {
+        const cloudUsers: UserAccount[] = [];
+        userSnapshot.forEach((d) => cloudUsers.push(d.data() as UserAccount));
+        const userMap = new Map<string, UserAccount>();
+        INITIAL_USERS.forEach((u) => userMap.set(u.id, u));
+        localUsers.forEach((u) => userMap.set(u.id, u));
+        cloudUsers.forEach((u) => userMap.set(u.id, u));
+        saveUsers(Array.from(userMap.values()));
+      }
+
+      // 2. Sync Reports
+      const reportsCol = collection(db, FIRESTORE_COLLECTIONS.REPORTS);
+      const reportSnapshot = await getDocs(reportsCol);
       const localReports = getReports();
 
-      if (snapshot.empty && localReports.length > 0) {
-        // Seed cloud with local reports
+      if (reportSnapshot.empty && localReports.length > 0) {
         const batch = writeBatch(db);
         localReports.forEach((report) => {
-          const docRef = doc(db, FIRESTORE_COLLECTIONS.REPORTS, report.id);
-          batch.set(docRef, report);
+          batch.set(doc(db, FIRESTORE_COLLECTIONS.REPORTS, report.id), report);
         });
-
         await batch.commit();
-        this.lastSyncTime = new Date();
-        this.syncError = null;
-        this.notifyStatus();
-        return {
-          success: true,
-          syncedCount: localReports.length,
-          message: `Berhasil mengunggah ${localReports.length} data laporan awal ke Cloud Firestore.`,
-        };
-      } else if (!snapshot.empty) {
-        // Pull latest from cloud
+      } else if (!reportSnapshot.empty) {
         const cloudReports: LaporanBudidaya[] = [];
-        snapshot.forEach((docSnap) => {
+        reportSnapshot.forEach((docSnap) => {
           cloudReports.push(docSnap.data() as LaporanBudidaya);
         });
 
         const mergedMap = new Map<string, LaporanBudidaya>();
         localReports.forEach((r) => mergedMap.set(r.id, r));
         cloudReports.forEach((r) => mergedMap.set(r.id, r));
-
         saveReports(Array.from(mergedMap.values()));
-        this.lastSyncTime = new Date();
-        this.syncError = null;
-        this.notifyStatus();
-        return {
-          success: true,
-          syncedCount: cloudReports.length,
-          message: `Berhasil sinkronisasi ${cloudReports.length} laporan dari Cloud Firestore.`,
-        };
       }
+
+      // 3. Sync Daily Reports
+      const dailyCol = collection(db, FIRESTORE_COLLECTIONS.DAILY_REPORTS);
+      const dailySnapshot = await getDocs(dailyCol);
+      const localDaily = getDailyReports();
+
+      if (dailySnapshot.empty && localDaily.length > 0) {
+        const batch = writeBatch(db);
+        localDaily.forEach((d) => {
+          batch.set(doc(db, FIRESTORE_COLLECTIONS.DAILY_REPORTS, d.id), d);
+        });
+        await batch.commit();
+      } else if (!dailySnapshot.empty) {
+        const cloudDaily: LaporanHarian[] = [];
+        dailySnapshot.forEach((docSnap) => {
+          cloudDaily.push(docSnap.data() as LaporanHarian);
+        });
+        const dailyMap = new Map<string, LaporanHarian>();
+        localDaily.forEach((d) => dailyMap.set(d.id, d));
+        cloudDaily.forEach((d) => dailyMap.set(d.id, d));
+        saveDailyReports(Array.from(dailyMap.values()));
+      }
+
+      this.lastSyncTime = new Date();
+      this.syncError = null;
+      this.notifyStatus();
 
       return {
         success: true,
-        syncedCount: 0,
+        syncedCount: localReports.length + localUsers.length,
         message: 'Koneksi Cloud Firestore aktif dan tersinkronisasi.',
       };
     } catch (err: any) {
@@ -203,6 +322,36 @@ class FirestoreSyncService {
         syncedCount: 0,
         message: `Gagal sinkronisasi: ${err.message}`,
       };
+    }
+  }
+
+  // Save single user to Firestore
+  public async saveUserToCloud(user: UserAccount): Promise<boolean> {
+    try {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.USERS, user.id);
+      await setDoc(docRef, user, { merge: true });
+      this.lastSyncTime = new Date();
+      this.notifyStatus();
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to save user to Firestore:', err);
+      this.syncError = err.message;
+      this.notifyStatus();
+      return false;
+    }
+  }
+
+  // Delete user from Firestore
+  public async deleteUserFromCloud(userId: string): Promise<boolean> {
+    try {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.USERS, userId);
+      await deleteDoc(docRef);
+      this.lastSyncTime = new Date();
+      this.notifyStatus();
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to delete user from Firestore:', err);
+      return false;
     }
   }
 
@@ -264,6 +413,30 @@ class FirestoreSyncService {
     }
   }
 
+  // Save single audit log to Firestore
+  public async saveAuditLogToCloud(log: AuditLog): Promise<boolean> {
+    try {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.AUDIT_LOGS, log.id);
+      await setDoc(docRef, log, { merge: true });
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to save audit log to Firestore:', err);
+      return false;
+    }
+  }
+
+  // Save single notification to Firestore
+  public async saveNotificationToCloud(notif: NotificationItem): Promise<boolean> {
+    try {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.NOTIFICATIONS, notif.id);
+      await setDoc(docRef, notif, { merge: true });
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to save notification to Firestore:', err);
+      return false;
+    }
+  }
+
   // Force push all local data to Firestore
   public async forcePushAllToCloud(): Promise<{ success: boolean; count: number; error?: string }> {
     try {
@@ -272,7 +445,6 @@ class FirestoreSyncService {
       const users = getUsers();
       const auditLogs = getAuditLogs();
 
-      // Push reports in batches
       for (const report of reports) {
         await setDoc(doc(db, FIRESTORE_COLLECTIONS.REPORTS, report.id), report, { merge: true });
       }
@@ -292,7 +464,7 @@ class FirestoreSyncService {
       this.lastSyncTime = new Date();
       this.syncError = null;
       this.notifyStatus();
-      return { success: true, count: reports.length + dailyReports.length };
+      return { success: true, count: reports.length + dailyReports.length + users.length };
     } catch (err: any) {
       this.syncError = err.message;
       this.notifyStatus();
@@ -301,6 +473,11 @@ class FirestoreSyncService {
   }
 
   private async syncPendingLocalToCloud() {
+    const localUsers = getUsers();
+    for (const u of localUsers) {
+      this.saveUserToCloud(u).catch(() => {});
+    }
+
     const localReports = getReports();
     for (const r of localReports) {
       if (r.status !== 'DRAFT_LOKAL') {
