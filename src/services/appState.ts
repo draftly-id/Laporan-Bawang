@@ -1,6 +1,7 @@
 import {
   UserAccount,
   LaporanBudidaya,
+  LaporanHarian,
   NotificationItem,
   AuditLog,
   RevisionRequest,
@@ -17,6 +18,7 @@ import {
 const STORAGE_KEYS = {
   USERS: 'siperbawa_users_v4_clean',
   REPORTS: 'siperbawa_reports_v4_clean',
+  DAILY_REPORTS: 'siperbawa_daily_reports_v4_clean',
   NOTIFICATIONS: 'siperbawa_notifications_v4_clean',
   AUDIT_LOGS: 'siperbawa_audit_logs_v4_clean',
   CURRENT_USER: 'siperbawa_current_user_v4_clean',
@@ -804,4 +806,141 @@ export function downloadDatabaseBackup(): {
     summary: backupPayload.summary,
   };
 }
+
+// ==========================================
+// 5. LAPORAN HARIAN / MONITORING BHABINKAMTIBMAS
+// ==========================================
+
+export function getDailyReports(): LaporanHarian[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DAILY_REPORTS);
+    if (raw) {
+      const parsed: LaporanHarian[] = JSON.parse(raw);
+      return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to parse daily reports', e);
+  }
+  return [];
+}
+
+export function saveDailyReports(dailyReports: LaporanHarian[]) {
+  localStorage.setItem(STORAGE_KEYS.DAILY_REPORTS, JSON.stringify(dailyReports));
+  notifyStateChanged();
+}
+
+export function submitOrUpdateDailyReport(
+  reportData: Partial<LaporanHarian>,
+  isDraft: boolean = false
+): LaporanHarian {
+  const dailyReports = getDailyReports();
+  const currentUser = getCurrentUser();
+  const now = new Date();
+  const nowFormatted = now.toLocaleString('id-ID', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const todayYMD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const nowHM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  let targetReport: LaporanHarian;
+
+  if (reportData.id) {
+    // Existing report update
+    const index = dailyReports.findIndex((r) => r.id === reportData.id);
+    if (index !== -1) {
+      dailyReports[index] = {
+        ...dailyReports[index],
+        ...reportData,
+        status: isDraft ? 'DRAFT_LOKAL' : 'TERKIRIM',
+        updatedAt: nowFormatted,
+      } as LaporanHarian;
+      targetReport = dailyReports[index];
+    } else {
+      throw new Error('Laporan Harian tidak ditemukan');
+    }
+  } else {
+    // New daily report creation
+    const currentYear = new Date().getFullYear();
+    const newId = `LH-${currentYear}-${String(dailyReports.length + 1).padStart(3, '0')}`;
+
+    targetReport = {
+      id: newId,
+      userId: currentUser?.id || 'unknown',
+      userName: currentUser?.name || 'Bhabinkamtibmas',
+      userNrp: currentUser?.username || '',
+      userRank: currentUser?.rank || 'BRIPKA',
+      polsek: currentUser?.polsek || 'Polsek Polres Enrekang',
+      wilayahBinaan: currentUser?.wilayahBinaan || 'Kabupaten Enrekang',
+      tanggalKunjungan: reportData.tanggalKunjungan || todayYMD,
+      waktuKunjungan: reportData.waktuKunjungan || nowHM,
+      namaPetaniAtauKelompok: reportData.namaPetaniAtauKelompok || 'Petani Binaan',
+      lokasiLahan: reportData.lokasiLahan || currentUser?.wilayahBinaan || 'Enrekang',
+      kategoriMonitoring: reportData.kategoriMonitoring || 'Rutin / Pemantauan Vegetatif',
+      kondisiTanaman: reportData.kondisiTanaman || 'Subur & Sehat',
+      catatan: reportData.catatan || '',
+      tindakanBhabinkamtibmas: reportData.tindakanBhabinkamtibmas || '',
+      dokumentasiFoto: reportData.dokumentasiFoto || [],
+      latitude: reportData.latitude ?? -3.5642,
+      longitude: reportData.longitude ?? 119.7731,
+      status: isDraft ? 'DRAFT_LOKAL' : 'TERKIRIM',
+      laporanLahanId: reportData.laporanLahanId,
+      createdAt: nowFormatted,
+      updatedAt: nowFormatted,
+    };
+
+    dailyReports.unshift(targetReport);
+  }
+
+  saveDailyReports(dailyReports);
+
+  if (currentUser) {
+    addAuditLog({
+      actorId: currentUser.id,
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      actionType: 'CREATE_REPORT',
+      targetInfo: `Laporan Harian: ${targetReport.id} - ${targetReport.namaPetaniAtauKelompok}`,
+      details: `${isDraft ? 'Menyimpan draf' : 'Mengirim'} Laporan Harian Kunjungan & Sambang Petani (${targetReport.tanggalKunjungan}) di ${targetReport.lokasiLahan}.`,
+    });
+
+    if (!isDraft) {
+      addNotification({
+        recipientUserId: 'ADMIN_ALL',
+        targetRole: 'ADMIN_PUSAT',
+        title: `Laporan Harian Baru dari ${currentUser.name}`,
+        message: `${currentUser.rank} ${currentUser.name} telah mengirimkan Laporan Harian Sambang/Monitoring Lahan Petani [${targetReport.namaPetaniAtauKelompok}] tanggal ${targetReport.tanggalKunjungan}.`,
+        type: 'NEW_REPORT',
+        priority: 'medium',
+      });
+    }
+  }
+
+  return targetReport;
+}
+
+export function deleteDailyReport(id: string): boolean {
+  const dailyReports = getDailyReports();
+  const filtered = dailyReports.filter((r) => r.id !== id);
+  if (filtered.length !== dailyReports.length) {
+    saveDailyReports(filtered);
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      addAuditLog({
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorRole: currentUser.role,
+        actionType: 'DELETE_REPORT',
+        targetInfo: `Laporan Harian ${id}`,
+        details: `Menghapus laporan harian kunjungan ${id}.`,
+      });
+    }
+    return true;
+  }
+  return false;
+}
+
 

@@ -11,16 +11,19 @@ import {
 } from './firebase';
 import {
   LaporanBudidaya,
+  LaporanHarian,
   UserAccount,
   AuditLog,
   NotificationItem,
 } from '../types';
 import {
   getReports,
+  getDailyReports,
   getUsers,
   getAuditLogs,
   getNotifications,
   saveReports,
+  saveDailyReports,
   saveUsers,
   subscribeState,
 } from './appState';
@@ -28,6 +31,7 @@ import {
 // Firestore collection names
 export const FIRESTORE_COLLECTIONS = {
   REPORTS: 'laporan_budidaya',
+  DAILY_REPORTS: 'laporan_harian',
   USERS: 'users_account',
   AUDIT_LOGS: 'audit_logs',
   NOTIFICATIONS: 'notifications',
@@ -232,16 +236,49 @@ class FirestoreSyncService {
     }
   }
 
+  // Save single daily report to Firestore
+  public async saveDailyReportToCloud(report: LaporanHarian): Promise<boolean> {
+    try {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.DAILY_REPORTS, report.id);
+      await setDoc(docRef, report, { merge: true });
+      this.lastSyncTime = new Date();
+      this.notifyStatus();
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to save daily report to Firestore:', err);
+      return false;
+    }
+  }
+
+  // Delete daily report from Firestore
+  public async deleteDailyReportFromCloud(reportId: string): Promise<boolean> {
+    try {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.DAILY_REPORTS, reportId);
+      await deleteDoc(docRef);
+      this.lastSyncTime = new Date();
+      this.notifyStatus();
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to delete daily report from Firestore:', err);
+      return false;
+    }
+  }
+
   // Force push all local data to Firestore
   public async forcePushAllToCloud(): Promise<{ success: boolean; count: number; error?: string }> {
     try {
       const reports = getReports();
+      const dailyReports = getDailyReports();
       const users = getUsers();
       const auditLogs = getAuditLogs();
 
       // Push reports in batches
       for (const report of reports) {
         await setDoc(doc(db, FIRESTORE_COLLECTIONS.REPORTS, report.id), report, { merge: true });
+      }
+
+      for (const dr of dailyReports) {
+        await setDoc(doc(db, FIRESTORE_COLLECTIONS.DAILY_REPORTS, dr.id), dr, { merge: true });
       }
 
       for (const user of users) {
@@ -255,7 +292,7 @@ class FirestoreSyncService {
       this.lastSyncTime = new Date();
       this.syncError = null;
       this.notifyStatus();
-      return { success: true, count: reports.length };
+      return { success: true, count: reports.length + dailyReports.length };
     } catch (err: any) {
       this.syncError = err.message;
       this.notifyStatus();
@@ -268,6 +305,13 @@ class FirestoreSyncService {
     for (const r of localReports) {
       if (r.status !== 'DRAFT_LOKAL') {
         this.saveReportToCloud(r).catch(() => {});
+      }
+    }
+
+    const localDailyReports = getDailyReports();
+    for (const dr of localDailyReports) {
+      if (dr.status !== 'DRAFT_LOKAL') {
+        this.saveDailyReportToCloud(dr).catch(() => {});
       }
     }
   }

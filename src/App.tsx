@@ -15,6 +15,7 @@ import {
   LogOut,
   CloudRain,
   BookOpen,
+  CalendarCheck,
 } from 'lucide-react';
 import { UserAccount, LaporanBudidaya } from './types';
 import {
@@ -34,6 +35,7 @@ import { OfflineSyncBanner } from './components/OfflineSyncBanner';
 
 // Bhabinkamtibmas Components
 import { MyReportsList } from './components/Bhabinkamtibmas/MyReportsList';
+import { DailyReportsList } from './components/Bhabinkamtibmas/DailyReportsList';
 import { ReportForm } from './components/Bhabinkamtibmas/ReportForm';
 import { PanduanBudidayaKementan } from './components/Bhabinkamtibmas/PanduanBudidayaKementan';
 
@@ -51,12 +53,14 @@ export default function App() {
   const [reports, setReports] = useState<LaporanBudidaya[]>(getReports());
 
   // Bhabinkamtibmas Active Sub-tab
-  const [bhabinTab, setBhabinTab] = useState<'MY_REPORTS' | 'NEW_REPORT' | 'CUACA_BMKG' | 'PANDUAN_KEMENTAN'>('MY_REPORTS');
+  const [bhabinTab, setBhabinTab] = useState<
+    'MY_REPORTS' | 'DAILY_REPORTS' | 'NEW_REPORT' | 'CUACA_BMKG' | 'PANDUAN_KEMENTAN'
+  >('MY_REPORTS');
   const [editingDraft, setEditingDraft] = useState<LaporanBudidaya | null>(null);
 
   // Admin Active Sub-tab
   const [adminTab, setAdminTab] = useState<
-    'DASHBOARD' | 'GIS' | 'CUACA_BMKG' | 'REVISIONS' | 'USERS'
+    'DASHBOARD' | 'DAILY_REPORTS' | 'GIS' | 'CUACA_BMKG' | 'REVISIONS' | 'USERS'
   >('DASHBOARD');
 
   // Modals & Drawers State
@@ -168,7 +172,21 @@ export default function App() {
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-900'
                 }`}
               >
-                <FileText className="w-3.5 h-3.5" /> Daftar Laporan Saya
+                <FileText className="w-3.5 h-3.5" /> Laporan Lahan
+              </button>
+
+              <button
+                onClick={() => {
+                  setEditingDraft(null);
+                  setBhabinTab('DAILY_REPORTS');
+                }}
+                className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  bhabinTab === 'DAILY_REPORTS'
+                    ? 'bg-amber-500 text-slate-950 shadow-md'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-900'
+                }`}
+              >
+                <CalendarCheck className="w-3.5 h-3.5" /> Laporan Harian
               </button>
 
               <button
@@ -182,7 +200,7 @@ export default function App() {
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-900'
                 }`}
               >
-                <PlusCircle className="w-3.5 h-3.5" /> Input Laporan Lahan Baru
+                <PlusCircle className="w-3.5 h-3.5" /> Input Lahan Baru
               </button>
 
               <button
@@ -210,7 +228,7 @@ export default function App() {
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-900'
                 }`}
               >
-                <BookOpen className="w-3.5 h-3.5" /> Panduan Budidaya Kementan
+                <BookOpen className="w-3.5 h-3.5" /> Panduan Budidaya
               </button>
             </div>
           ) : (
@@ -225,6 +243,17 @@ export default function App() {
                 }`}
               >
                 <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+              </button>
+
+              <button
+                onClick={() => setAdminTab('DAILY_REPORTS')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  adminTab === 'DAILY_REPORTS'
+                    ? 'bg-amber-500 text-slate-950 shadow'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-900'
+                }`}
+              >
+                <CalendarCheck className="w-3.5 h-3.5" /> Laporan Harian Sambang
               </button>
 
               <button
@@ -296,6 +325,12 @@ export default function App() {
                   setBhabinTab('MY_REPORTS');
                 }}
               />
+            ) : bhabinTab === 'DAILY_REPORTS' ? (
+              <DailyReportsList
+                currentUser={currentUser}
+                existingReports={reports}
+                onRefresh={refreshData}
+              />
             ) : bhabinTab === 'CUACA_BMKG' ? (
               <WeatherBMKGCard
                 initialKecamatan={
@@ -332,10 +367,19 @@ export default function App() {
                 onRefresh={refreshData}
                 onOpenGis={() => setAdminTab('GIS')}
                 onOpenWeather={() => setAdminTab('CUACA_BMKG')}
+                onOpenDailyReports={() => setAdminTab('DAILY_REPORTS')}
                 onOpenRevisions={() => setAdminTab('REVISIONS')}
                 onOpenUserMgmt={() => setAdminTab('USERS')}
                 onOpenExport={() => setIsExportOpen(true)}
                 onOpenPredictive={(report) => handleOpenPredictive(report)}
+              />
+            )}
+
+            {adminTab === 'DAILY_REPORTS' && (
+              <DailyReportsList
+                currentUser={currentUser}
+                existingReports={reports}
+                onRefresh={refreshData}
               />
             )}
 

@@ -72,6 +72,40 @@ export interface PhotoBukti {
 
 export type BuktiFoto = PhotoBukti;
 
+export type KategoriMonitoring =
+  | 'Rutin / Pemantauan Vegetatif'
+  | 'Pengecekan Hama & Penyakit'
+  | 'Pendampingan Pemupukan & Pengairan'
+  | 'Kesiapan & Estimasi Panen'
+  | 'Edukasi & Sambang Kamtibmas Petani'
+  | 'Koordinasi PPL & Kelompok Tani';
+
+export interface LaporanHarian {
+  id: string;
+  userId: string;
+  userName: string;
+  userNrp: string;
+  userRank: string;
+  polsek: string;
+  wilayahBinaan: string;
+  // Detail Pelaporan Kunjungan
+  tanggalKunjungan: string; // YYYY-MM-DD
+  waktuKunjungan: string; // HH:mm
+  namaPetaniAtauKelompok: string;
+  lokasiLahan: string; // Desa/Dusun/Kelompok Tani
+  kategoriMonitoring: KategoriMonitoring;
+  kondisiTanaman: string; // e.g. Subur & Normal, Perlu Pengairan, Terserang Hama, Siap Panen
+  catatan: string; // Catatan hasil monitoring, dialog dengan petani
+  tindakanBhabinkamtibmas?: string; // Arahan kamtibmas, edukasi, rekomendasi
+  dokumentasiFoto: PhotoBukti[];
+  latitude: number;
+  longitude: number;
+  status: 'TERKIRIM' | 'DRAFT_LOKAL';
+  laporanLahanId?: string; // Relasi ke ID Laporan Budidaya Utama jika ada
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DataPanen {
   tanggalPanen: string;
   luasPanenM2: number;

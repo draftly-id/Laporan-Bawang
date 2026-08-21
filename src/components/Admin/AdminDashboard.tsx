@@ -24,6 +24,14 @@ import {
   HardDrive,
   Cloud,
   RefreshCw,
+  CalendarCheck,
+  Calendar,
+  Building2,
+  Navigation,
+  Eye,
+  Camera,
+  ChevronRight,
+  User,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -38,8 +46,8 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { LaporanBudidaya, UserAccount } from '../../types';
-import { adminDeleteReport, downloadDatabaseBackup } from '../../services/appState';
+import { LaporanBudidaya, UserAccount, LaporanHarian } from '../../types';
+import { adminDeleteReport, downloadDatabaseBackup, getDailyReports } from '../../services/appState';
 import { firestoreSync } from '../../services/firestoreSync';
 
 interface AdminDashboardProps {
@@ -52,6 +60,7 @@ interface AdminDashboardProps {
   onOpenUserMgmt: () => void;
   onOpenExport: () => void;
   onOpenPredictive: (report: LaporanBudidaya) => void;
+  onOpenDailyReports?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -64,6 +73,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenUserMgmt,
   onOpenExport,
   onOpenPredictive,
+  onOpenDailyReports,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedKab, setSelectedKab] = useState('SEMUA');
@@ -71,6 +81,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedDesa, setSelectedDesa] = useState('SEMUA');
   const [deleteModalReport, setDeleteModalReport] = useState<LaporanBudidaya | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+  const [selectedDailyPhoto, setSelectedDailyPhoto] = useState<string | null>(null);
+
+  // Daily Sambang reports
+  const dailyReports: LaporanHarian[] = getDailyReports();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const dailyTodayCount = dailyReports.filter((r) => r.tanggalKunjungan === todayStr).length;
+  const uniquePetaniSambang = new Set(dailyReports.map((r) => r.namaPetaniAtauKelompok.toLowerCase().trim())).size;
+  const totalFotoSambang = dailyReports.reduce((acc, r) => acc + (r.dokumentasiFoto?.length || 0), 0);
 
   // Backup Modal State
   const [backupModalData, setBackupModalData] = useState<{
@@ -299,9 +317,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           )}
 
+          {onOpenDailyReports && (
+            <button
+              onClick={onOpenDailyReports}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Buka Pusat Monitoring Laporan Harian Sambang Bhabinkamtibmas Seluruh Polsek"
+            >
+              <CalendarCheck className="w-4 h-4 text-amber-400" />
+              <span>Monitoring Sambang</span>
+              {dailyReports.length > 0 && (
+                <span className="bg-amber-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
+                  {dailyReports.length}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={onOpenRevisions}
-            className="relative px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold flex items-center gap-1.5 transition"
+            className="relative px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer"
           >
             <FileEdit className="w-4 h-4 text-amber-400" /> Revisi Data
             {pendingRevisionsCount > 0 && (
@@ -768,6 +802,188 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
       </div>
 
+      {/* Monitoring Real-Time Laporan Harian Sambang Bhabinkamtibmas Presisi */}
+      <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 sm:p-5 text-white shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl">
+              <CalendarCheck className="w-5 h-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base text-amber-300">
+                  Monitoring Laporan Harian Sambang Bhabinkamtibmas
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+                  Presisi Agro
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Pemantauan terpusat kegiatan tatap muka, pendampingan kelompok tani, dan patroli dialogis ketahanan pangan
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onOpenDailyReports && (
+              <button
+                onClick={onOpenDailyReports}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+              >
+                <span>Lihat Seluruh Laporan ({dailyReports.length})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Live Daily Sambang Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <CalendarCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400">Total Sambang</p>
+              <p className="text-base font-extrabold text-white">
+                {dailyReports.length} <span className="text-[10px] font-normal text-slate-400">Kegiatan</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400">Kunjungan Hari Ini</p>
+              <p className="text-base font-extrabold text-sky-300">
+                {dailyTodayCount} <span className="text-[10px] font-normal text-slate-400">Kegiatan</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400">Petani Didampingi</p>
+              <p className="text-base font-extrabold text-emerald-300">
+                {uniquePetaniSambang} <span className="text-[10px] font-normal text-slate-400">Sasaran</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+              <Camera className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400">Foto Berstempel</p>
+              <p className="text-base font-extrabold text-purple-300">
+                {totalFotoSambang} <span className="text-[10px] font-normal text-slate-400">Bukti</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Daily Sambang List */}
+        {dailyReports.length === 0 ? (
+          <div className="p-6 text-center text-slate-400 text-xs bg-slate-950/50 rounded-xl border border-slate-800/80">
+            Belum ada data laporan harian kunjungan Bhabinkamtibmas. Laporan sambang akan masuk otomatis begitu diinput oleh personel di lapangan.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {dailyReports.slice(0, 6).map((d) => (
+              <div
+                key={d.id}
+                className="bg-slate-950/90 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-3.5 space-y-2.5 transition flex flex-col justify-between"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-amber-400" />
+                      {d.tanggalKunjungan} • {d.waktuKunjungan || '09:00'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 font-bold border border-slate-700 flex items-center gap-1">
+                      <Building2 className="w-3 h-3 text-amber-400" /> {d.polsek}
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{d.namaPetaniAtauKelompok}</span>
+                      </h4>
+                      {d.latitude && d.longitude && (
+                        <a
+                          href={`https://www.google.com/maps?q=${d.latitude},${d.longitude}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-sky-400 hover:underline flex items-center gap-0.5"
+                        >
+                          <Navigation className="w-2.5 h-2.5" /> Maps
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span className="truncate">{d.lokasiLahan}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px] font-medium">
+                      {d.kategoriMonitoring}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[9px] font-medium border border-emerald-800/40 flex items-center gap-0.5">
+                      <Sprout className="w-2.5 h-2.5 text-emerald-400" />
+                      {d.kondisiTanaman}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 line-clamp-2 italic bg-slate-900/90 p-2 rounded-xl border border-slate-800/60">
+                    "{d.catatan}"
+                  </p>
+
+                  {/* Photo Thumbnails */}
+                  {d.dokumentasiFoto && d.dokumentasiFoto.length > 0 && (
+                    <div className="flex items-center gap-1.5 pt-1 overflow-x-auto">
+                      {d.dokumentasiFoto.map((p, pIdx) => (
+                        <img
+                          key={p.id || pIdx}
+                          src={p.url}
+                          alt="Dokumentasi Sambang"
+                          onClick={() => setSelectedDailyPhoto(p.url)}
+                          className="w-12 h-9 rounded-lg object-cover border border-slate-700 hover:border-amber-400 cursor-pointer transition shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>
+                    Bhabin: <strong className="text-slate-200">{d.userName}</strong>
+                  </span>
+                  {onOpenDailyReports && (
+                    <button
+                      onClick={onOpenDailyReports}
+                      className="text-amber-400 hover:underline font-bold"
+                    >
+                      Buka Detail →
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Control Panel CRUD Table for Reports */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -1063,6 +1279,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 Tutup & Selesai
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Sambang Photo Zoom Modal */}
+      {selectedDailyPhoto && (
+        <div
+          onClick={() => setSelectedDailyPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-150 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-3xl p-3 shadow-2xl overflow-hidden"
+          >
+            <button
+              onClick={() => setSelectedDailyPhoto(null)}
+              className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-slate-950/80 text-white hover:bg-rose-600 flex items-center justify-center transition border border-white/20"
+            >
+              ✕
+            </button>
+            <img
+              src={selectedDailyPhoto}
+              alt="Dokumentasi Sambang Zoom"
+              className="max-h-[80vh] w-auto object-contain rounded-2xl mx-auto"
+              referrerPolicy="no-referrer"
+            />
+            <div className="text-center mt-2 text-xs text-slate-400">
+              Dokumentasi Lapangan Sambang Bhabinkamtibmas Presisi - Satbinmas Polres Enrekang
             </div>
           </div>
         </div>
